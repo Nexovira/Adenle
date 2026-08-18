@@ -1,0 +1,6 @@
+{
+  "name": "NEXOVIRA",
+  "description": "NEXOVIRA — Innovation begins with vision. Smart living, better every day. An AI-powered commerce marketplace for appliances, electronics, smart home technology, and consumer electronics.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
