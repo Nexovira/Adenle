@@ -709,15 +709,43 @@ export type ActiveEcosystemView =
   | 'contact'
   | 'presentation';
 
+export type BankVerificationStatus = 
+  | 'unverified' 
+  | 'verifying' 
+  | 'verified' 
+  | 'failed' 
+  | 'provider_unavailable' 
+  | 'verification_required'
+  | 'mismatch';
+
+export type SellerApprovalStatus = 'pending' | 'approved' | 'rejected' | 'suspended';
+
+export interface NigerianBankItem {
+  name: string;
+  code: string;
+  slug?: string;
+  id?: number | string;
+}
+
+export interface ProviderStatusResponse {
+  configured: boolean;
+  provider: string;
+  missingCredentials?: string[];
+  message: string;
+}
+
 export interface SellerBankAccount {
   bankName: string;
   bankCode?: string;
   accountNumber: string; // 10 digit NUBAN
   maskedAccountNumber?: string; // e.g. ••••••6789
   accountName: string;   // Real provider-verified official account holder name (NON-EDITABLE)
-  verificationStatus: 'unverified' | 'verified' | 'failed' | 'mismatch';
-  providerReference?: string; // e.g. NEXO_NUBAN_REF_17238491
+  verificationStatus: BankVerificationStatus;
+  provider?: string;     // e.g. 'Paystack' | 'Flutterwave'
+  providerReference?: string; // e.g. PAYSTACK_RESOLVE_...
   verifiedAt?: string;
+  confirmedBySeller?: boolean;
+  confirmedAt?: string;
   nameMatchStatus?: 'compatible' | 'mismatch' | 'unchecked';
   nameMatchScore?: number;
   nameMatchNotes?: string;
@@ -727,13 +755,25 @@ export interface SellerBankAccount {
 export interface SellerBankAccountAuditLog {
   id: string;
   sellerId: string;
+  sellerName?: string;
   adminId?: string;
-  action: 'BANK_VERIFIED' | 'BANK_CHANGED' | 'ADMIN_OVERRIDE' | 'PAYOUT_HELD';
+  action: 
+    | 'VERIFICATION_REQUESTED'
+    | 'VERIFICATION_SUCCEEDED'
+    | 'VERIFICATION_FAILED'
+    | 'BANK_ACCOUNT_CONFIRMED'
+    | 'BANK_ACCOUNT_CHANGED'
+    | 'VERIFICATION_REVOKED'
+    | 'ADMIN_OVERRIDE'
+    | 'PAYOUT_HELD';
   previousAccountName?: string;
-  newAccountName: string;
+  newAccountName?: string;
   bankName: string;
+  bankCode?: string;
   accountNumberMasked: string;
+  provider?: string;
   providerReference?: string;
+  status?: BankVerificationStatus;
   reason?: string;
   timestamp: string;
 }

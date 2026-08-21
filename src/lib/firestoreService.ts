@@ -2604,31 +2604,111 @@ export function compareAccountNameWithProfile(accountName: string, profileName?:
   };
 }
 
+// Real Nigerian Bank Verification Service & Provider Connectors
+
+export async function fetchBankVerificationProviderStatus(): Promise<{
+  configured: boolean;
+  provider: string;
+  missingCredentials?: string[];
+  message: string;
+}> {
+  try {
+    const res = await fetch('/api/v1/bank/provider-status');
+    if (res.ok) {
+      return await res.json();
+    }
+    const errData = await res.json().catch(() => ({}));
+    return {
+      configured: false,
+      provider: errData.provider || 'paystack',
+      missingCredentials: errData.missingCredentials || ['PAYSTACK_SECRET_KEY'],
+      message: errData.message || 'Provider configuration offline.'
+    };
+  } catch (err: any) {
+    return {
+      configured: false,
+      provider: 'paystack',
+      missingCredentials: ['PAYSTACK_SECRET_KEY'],
+      message: 'Failed to contact bank verification service.'
+    };
+  }
+}
+
+export async function fetchNigerianBanksList(): Promise<{
+  success: boolean;
+  configured: boolean;
+  provider: string;
+  banks: Array<{ name: string; code: string; slug?: string; id?: number | string }>;
+  message: string;
+}> {
+  try {
+    const res = await fetch('/api/v1/bank/banks');
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success && Array.isArray(data.banks) && data.banks.length > 0) {
+      return {
+        success: true,
+        configured: true,
+        provider: data.provider || 'Paystack',
+        banks: data.banks,
+        message: 'Loaded verified Nigerian banks from live provider.'
+      };
+    }
+    return {
+      success: false,
+      configured: data.configured ?? false,
+      provider: data.provider || 'Paystack',
+      banks: [],
+      message: data.message || 'Live Nigerian bank list is unavailable. Configure provider API key.'
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      configured: false,
+      provider: 'Paystack',
+      banks: [],
+      message: 'Could not connect to Nigerian bank directory service.'
+    };
+  }
+}
+
 export async function verifyNigerianBankAccount(
   bankName: string, 
+  bankCode: string,
   accountNumber: string,
-  sellerProfileName?: string
+  sellerProfileName?: string,
+  sellerId?: string
 ): Promise<{
   verified: boolean;
+  status: 'verified' | 'failed' | 'provider_unavailable' | 'config_required' | 'invalid_input';
   accountName: string;
   bankName: string;
+  bankCode: string;
   accountNumber: string;
   maskedAccountNumber: string;
+  provider: string;
   providerReference: string;
   verifiedAt: string;
   nameMatchStatus: 'compatible' | 'mismatch' | 'unchecked';
   nameMatchScore: number;
   nameMatchNotes: string;
   message: string;
+  errorCode?: string;
+  missingCredentials?: string[];
 }> {
   const cleanAcc = accountNumber.replace(/\D/g, '');
+  const cleanCode = (bankCode || '').trim();
+
   if (cleanAcc.length !== 10) {
     return {
       verified: false,
+      status: 'invalid_input',
+      errorCode: 'INVALID_NUBAN_LENGTH',
       accountName: '',
       bankName,
+      bankCode: cleanCode,
       accountNumber: cleanAcc,
       maskedAccountNumber: '',
+      provider: '',
       providerReference: '',
       verifiedAt: '',
       nameMatchStatus: 'unchecked',
@@ -2638,13 +2718,17 @@ export async function verifyNigerianBankAccount(
     };
   }
 
-  if (!bankName || bankName.trim() === '') {
+  if (!cleanCode && !bankName) {
     return {
       verified: false,
+      status: 'invalid_input',
+      errorCode: 'MISSING_BANK',
       accountName: '',
       bankName: '',
+      bankCode: '',
       accountNumber: cleanAcc,
       maskedAccountNumber: '',
+      provider: '',
       providerReference: '',
       verifiedAt: '',
       nameMatchStatus: 'unchecked',
@@ -2654,62 +2738,142 @@ export async function verifyNigerianBankAccount(
     };
   }
 
-  let officialName = '';
-  let providerRef = '';
-  let verifiedAt = new Date().toISOString();
-  let maskedAcc = `••••••${cleanAcc.slice(-4)}`;
-
   try {
     const response = await fetch('/api/v1/bank/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bankName, accountNumber: cleanAcc, sellerProfileName })
+      body: JSON.stringify({
+        bankName,
+        bankCode: cleanCode,
+        accountNumber: cleanAcc,
+        sellerId
+      })
     });
-    if (response.ok) {
-      const data = await response.json();
-      if (data.verified && data.accountName) {
-        officialName = data.accountName;
-        providerRef = data.providerReference || `NEXO_NUBAN_REF_${Date.now()}`;
-        if (data.maskedAccountNumber) maskedAcc = data.maskedAccountNumber;
-        if (data.verifiedAt) verifiedAt = data.verifiedAt;
+
+    const resJson = await response.json().catch(() => ({}));
+
+    // If provider rejected or unconfigured or verification failed
+    if (!response.ok || !resJson.verified) {
+      const isConfigError = resJson.status === 'CONFIG_REQUIRED' || resJson.errorCode?.includes('MISSING_');
+      const isUnavailable = resJson.status === 'PROVIDER_UNAVAILABLE';
+      
+      // Record verification failure audit if sellerId provided
+      if (sellerId) {
+        try {
+          const auditRef = doc(collection(db, 'seller_bank_audit_logs'));
+          await setDoc(auditRef, sanitizeFirestoreData({
+            id: auditRef.id,
+            sellerId,
+            action: 'VERIFICATION_FAILED',
+            bankName,
+            bankCode: cleanCode,
+            accountNumberMasked: `••••••${cleanAcc.slice(-4)}`,
+            provider: resJson.provider || 'Paystack',
+            status: 'failed',
+            reason: resJson.message || 'Provider lookup failed',
+            timestamp: new Date().toISOString()
+          }));
+        } catch (e) {
+          // ignore audit logging error on failed lookup
+        }
+      }
+
+      return {
+        verified: false,
+        status: isConfigError ? 'config_required' : (isUnavailable ? 'provider_unavailable' : 'failed'),
+        errorCode: resJson.errorCode || 'LOOKUP_FAILED',
+        missingCredentials: resJson.missingCredentials,
+        accountName: '',
+        bankName,
+        bankCode: cleanCode,
+        accountNumber: cleanAcc,
+        maskedAccountNumber: `••••••${cleanAcc.slice(-4)}`,
+        provider: resJson.provider || 'Paystack',
+        providerReference: '',
+        verifiedAt: '',
+        nameMatchStatus: 'unchecked',
+        nameMatchScore: 0,
+        nameMatchNotes: '',
+        message: resJson.message || "We couldn't verify this bank account. Please check the account number and selected bank."
+      };
+    }
+
+    // Official Genuine Provider Account Name
+    const officialName = String(resJson.accountName || '').trim().toUpperCase();
+    const maskedAcc = resJson.maskedAccountNumber || `••••••${cleanAcc.slice(-4)}`;
+    const providerRef = resJson.providerReference || `NEXO_VERIF_${Date.now()}`;
+    const verifiedAt = resJson.verifiedAt || new Date().toISOString();
+    const providerName = resJson.provider || 'Paystack';
+
+    const nameCheck = compareAccountNameWithProfile(officialName, sellerProfileName);
+
+    // Record verification success audit if sellerId is provided
+    if (sellerId) {
+      try {
+        const auditRef = doc(collection(db, 'seller_bank_audit_logs'));
+        await setDoc(auditRef, sanitizeFirestoreData({
+          id: auditRef.id,
+          sellerId,
+          action: 'VERIFICATION_SUCCEEDED',
+          newAccountName: officialName,
+          bankName,
+          bankCode: cleanCode,
+          accountNumberMasked: maskedAcc,
+          provider: providerName,
+          providerReference: providerRef,
+          status: 'verified',
+          timestamp: new Date().toISOString()
+        }));
+      } catch (e) {
+        // ignore
       }
     }
-  } catch (err) {
-    console.warn('Backend API call failed, falling back to local lookup engine:', err);
+
+    return {
+      verified: true,
+      status: 'verified',
+      accountName: officialName, // STRICTLY from provider
+      bankName: resJson.bankName || bankName,
+      bankCode: cleanCode,
+      accountNumber: cleanAcc,
+      maskedAccountNumber: maskedAcc,
+      provider: providerName,
+      providerReference: providerRef,
+      verifiedAt,
+      nameMatchStatus: nameCheck.isCompatible ? 'compatible' : 'mismatch',
+      nameMatchScore: nameCheck.score,
+      nameMatchNotes: nameCheck.notes,
+      message: resJson.message || 'Official bank account holder name successfully verified by provider.'
+    };
+  } catch (err: any) {
+    return {
+      verified: false,
+      status: 'provider_unavailable',
+      errorCode: 'NETWORK_ERROR',
+      accountName: '',
+      bankName,
+      bankCode: cleanCode,
+      accountNumber: cleanAcc,
+      maskedAccountNumber: '',
+      provider: 'Paystack',
+      providerReference: '',
+      verifiedAt: '',
+      nameMatchStatus: 'unchecked',
+      nameMatchScore: 0,
+      nameMatchNotes: '',
+      message: 'Bank verification service is temporarily unavailable. Please verify your connection.'
+    };
   }
-
-  // Fallback to local interbank resolution engine if server call was offline
-  if (!officialName) {
-    if (cleanAcc.startsWith('0') || cleanAcc.startsWith('1')) officialName = 'AMINA BELLO TRADING';
-    else if (cleanAcc.startsWith('2') || cleanAcc.startsWith('3')) officialName = 'CHUKWUEMEKA DAVID NWACHUKWU';
-    else if (cleanAcc.startsWith('4') || cleanAcc.startsWith('5')) officialName = 'EMMANUEL OKONKWO MERCHANDISE';
-    else if (cleanAcc.startsWith('6') || cleanAcc.startsWith('7')) officialName = 'KILANBA TECH VENTURES';
-    else if (cleanAcc.startsWith('8')) officialName = 'YUSUF ADENIJI ENTERPRISES';
-    else officialName = 'FOLAKE BUKOLA OGUNLEYE';
-    providerRef = `NEXO_NUBAN_REF_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
-  }
-
-  const nameCheck = compareAccountNameWithProfile(officialName, sellerProfileName);
-
-  return {
-    verified: true,
-    accountName: officialName, // STRICTLY FROM PROVIDER
-    bankName,
-    accountNumber: cleanAcc,
-    maskedAccountNumber: maskedAcc,
-    providerReference: providerRef,
-    verifiedAt,
-    nameMatchStatus: nameCheck.isCompatible ? 'compatible' : 'mismatch',
-    nameMatchScore: nameCheck.score,
-    nameMatchNotes: nameCheck.notes,
-    message: 'Official bank account holder name successfully retrieved from NUBAN verification provider.'
-  };
 }
 
-export async function saveSellerBankAccountInFirestore(sellerId: string, bankDetails: SellerBankAccount): Promise<SellerBankAccount> {
+export async function saveSellerBankAccountInFirestore(
+  sellerId: string, 
+  bankDetails: SellerBankAccount,
+  sellerName?: string
+): Promise<SellerBankAccount> {
   try {
     if (bankDetails.verificationStatus !== 'verified' || !bankDetails.providerReference || !bankDetails.accountName) {
-      throw new Error('Bank account details must be verified by the provider before saving.');
+      throw new Error('Bank account details must be verified by the interbank provider before linking to payouts.');
     }
 
     const docRef = doc(db, 'seller_profiles', sellerId);
@@ -2720,21 +2884,26 @@ export async function saveSellerBankAccountInFirestore(sellerId: string, bankDet
 
     const sanitizedBank: SellerBankAccount = {
       bankName: bankDetails.bankName,
-      bankCode: bankDetails.bankCode || '058',
+      bankCode: bankDetails.bankCode || '',
       accountNumber: cleanAcc,
       maskedAccountNumber: maskedAcc,
       accountName: bankDetails.accountName, // Official provider name only
       verificationStatus: 'verified',
+      provider: bankDetails.provider || 'Paystack',
       providerReference: bankDetails.providerReference,
       verifiedAt: bankDetails.verifiedAt || new Date().toISOString(),
+      confirmedBySeller: true,
+      confirmedAt: new Date().toISOString(),
       nameMatchStatus: bankDetails.nameMatchStatus || 'compatible',
       nameMatchScore: bankDetails.nameMatchScore || 100,
-      nameMatchNotes: bankDetails.nameMatchNotes || 'Verified via NUBAN lookup service'
+      nameMatchNotes: bankDetails.nameMatchNotes || 'Verified via NUBAN provider'
     };
 
     const sanitized = sanitizeFirestoreData({
       sellerId,
+      sellerName: sellerName || '',
       bankDetails: sanitizedBank,
+      bankVerificationStatus: 'verified',
       updatedAt: new Date().toISOString()
     });
 
@@ -2746,11 +2915,15 @@ export async function saveSellerBankAccountInFirestore(sellerId: string, bankDet
       const auditLog: SellerBankAccountAuditLog = {
         id: auditRef.id,
         sellerId,
-        action: 'BANK_VERIFIED',
+        sellerName: sellerName || '',
+        action: 'BANK_ACCOUNT_CONFIRMED',
         newAccountName: sanitizedBank.accountName,
         bankName: sanitizedBank.bankName,
+        bankCode: sanitizedBank.bankCode,
         accountNumberMasked: maskedAcc,
+        provider: sanitizedBank.provider,
         providerReference: sanitizedBank.providerReference,
+        status: 'verified',
         timestamp: new Date().toISOString()
       };
       await setDoc(auditRef, sanitizeFirestoreData(auditLog));
@@ -2761,6 +2934,68 @@ export async function saveSellerBankAccountInFirestore(sellerId: string, bankDet
     return sanitizedBank;
   } catch (err) {
     console.error('Error saving seller bank account:', err);
+    throw err;
+  }
+}
+
+export async function fetchSellerBankAccountAuditLogs(sellerId?: string): Promise<SellerBankAccountAuditLog[]> {
+  try {
+    const colRef = collection(db, 'seller_bank_audit_logs');
+    let q = query(colRef, orderBy('timestamp', 'desc'), limit(50));
+    if (sellerId) {
+      q = query(colRef, where('sellerId', '==', sellerId), orderBy('timestamp', 'desc'), limit(30));
+    }
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({
+      id: d.id,
+      ...d.data()
+    })) as SellerBankAccountAuditLog[];
+  } catch (err) {
+    console.error('Error fetching seller bank audit logs:', err);
+    return [];
+  }
+}
+
+export async function revokeSellerBankAccountInFirestore(
+  sellerId: string,
+  reason: string,
+  adminId?: string
+): Promise<void> {
+  try {
+    const docRef = doc(db, 'seller_profiles', sellerId);
+    const snap = await getDoc(docRef);
+    const existing = snap.exists() ? snap.data() : null;
+    const prevBank = existing?.bankDetails as SellerBankAccount | undefined;
+
+    await setDoc(docRef, {
+      bankDetails: {
+        ...(prevBank || {}),
+        verificationStatus: 'unverified'
+      },
+      bankVerificationStatus: 'unverified',
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+
+    // Record revocation audit log
+    const auditRef = doc(collection(db, 'seller_bank_audit_logs'));
+    const auditLog: SellerBankAccountAuditLog = {
+      id: auditRef.id,
+      sellerId,
+      adminId,
+      action: 'VERIFICATION_REVOKED',
+      previousAccountName: prevBank?.accountName,
+      bankName: prevBank?.bankName || 'Unknown Bank',
+      bankCode: prevBank?.bankCode,
+      accountNumberMasked: prevBank?.maskedAccountNumber || '••••••',
+      provider: prevBank?.provider || 'Paystack',
+      providerReference: prevBank?.providerReference,
+      status: 'unverified',
+      reason: reason || 'Bank verification revoked by administrator',
+      timestamp: new Date().toISOString()
+    };
+    await setDoc(auditRef, sanitizeFirestoreData(auditLog));
+  } catch (err) {
+    console.error('Error revoking seller bank account:', err);
     throw err;
   }
 }

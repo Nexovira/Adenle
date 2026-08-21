@@ -38,6 +38,7 @@ import {
   Sliders
 } from 'lucide-react';
 import { EbookProductUploadForm } from './EbookProductUploadForm';
+import { SellerBankVerificationModal } from './SellerBankVerificationModal';
 import { 
   ResponsiveContainer, 
   AreaChart, 
@@ -65,8 +66,6 @@ import {
   getSellerNotificationsFromFirestore,
   markNotificationAsReadInFirestore,
   getSellerWalletSummaryInFirestore,
-  saveSellerBankAccountInFirestore,
-  verifyNigerianBankAccount,
   createSellerPayoutRequestInFirestore
 } from '../lib/firestoreService';
 import { auth } from '../lib/firebase';
@@ -76,29 +75,6 @@ interface SellerDashboardViewProps {
   sellerId?: string;
   sellerName?: string;
 }
-
-const NIGERIAN_BANKS = [
-  'Guaranty Trust Bank (GTBank)',
-  'Access Bank',
-  'Zenith Bank',
-  'First Bank of Nigeria',
-  'United Bank for Africa (UBA)',
-  'Kuda Microfinance Bank',
-  'OPay Digital Services',
-  'Moniepoint Microfinance Bank',
-  'Palmpay',
-  'FCMB (First City Monument Bank)',
-  'Standard Chartered Bank',
-  'Union Bank of Nigeria',
-  'Sterling Bank',
-  'Providus Bank',
-  'Wema Bank (ALAT)',
-  'Stanbic IBTC Bank',
-  'Fidelity Bank',
-  'Ecobank Nigeria',
-  'Polaris Bank',
-  'Keystone Bank'
-];
 
 export const SellerDashboardView: React.FC<SellerDashboardViewProps> = ({ 
   onAddProduct,
@@ -153,27 +129,6 @@ export const SellerDashboardView: React.FC<SellerDashboardViewProps> = ({
   const [withdrawMsg, setWithdrawMsg] = useState('');
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
-  // Bank Form State
-  const [bankName, setBankName] = useState(NIGERIAN_BANKS[0]);
-  const [accountNumber, setAccountNumber] = useState('');
-  const [verificationMsg, setVerificationMsg] = useState('');
-  const [isVerifyingBank, setIsVerifyingBank] = useState(false);
-  const [verifiedAccName, setVerifiedAccName] = useState('');
-  const [verifiedResult, setVerifiedResult] = useState<{
-    verified: boolean;
-    accountName: string;
-    bankName: string;
-    accountNumber: string;
-    maskedAccountNumber: string;
-    providerReference: string;
-    verifiedAt: string;
-    nameMatchStatus: 'compatible' | 'mismatch' | 'unchecked';
-    nameMatchScore: number;
-    nameMatchNotes: string;
-    message: string;
-  } | null>(null);
-  const [isSavingBank, setIsSavingBank] = useState(false);
-
   // Product Deletion State & Confirmation Modal
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [isDeletingProduct, setIsDeletingProduct] = useState(false);
@@ -207,12 +162,6 @@ export const SellerDashboardView: React.FC<SellerDashboardViewProps> = ({
       setLedgerEntries(walletRes.ledgerEntries);
       setPayoutHistory(walletRes.payoutHistory);
       setSellerConfig(walletRes.config);
-
-      if (walletRes.bankAccount) {
-        setBankName(walletRes.bankAccount.bankName || NIGERIAN_BANKS[0]);
-        setAccountNumber(walletRes.bankAccount.accountNumber || '');
-        setVerifiedAccName(walletRes.bankAccount.accountName || '');
-      }
     } catch (err) {
       console.error('Error loading seller inventory:', err);
       const fallbackProds = PRODUCTS.filter((p) => p.sellerId === resolvedSellerId);
@@ -275,73 +224,6 @@ export const SellerDashboardView: React.FC<SellerDashboardViewProps> = ({
       setCatRequestStatus('Failed to submit category request. Please try again.');
     } finally {
       setSubmittingCat(false);
-    }
-  };
-
-  // Bank Account Input Handlers (Immediately invalidates previous verification on edit)
-  const handleBankNameChange = (newBank: string) => {
-    setBankName(newBank);
-    setVerifiedResult(null);
-    setVerifiedAccName('');
-    setVerificationMsg('Bank selected. Click "Verify NUBAN" to retrieve the official account holder name.');
-  };
-
-  const handleAccountNumberChange = (val: string) => {
-    const clean = val.replace(/\D/g, '').slice(0, 10);
-    setAccountNumber(clean);
-    setVerifiedResult(null);
-    setVerifiedAccName('');
-    setVerificationMsg(clean.length === 10 ? 'Click "Verify NUBAN" to query the payment provider.' : 'Enter 10-digit NUBAN account number.');
-  };
-
-  // Bank Account Verification & Save
-  const handleVerifyBank = async () => {
-    setVerificationMsg('');
-    setVerifiedAccName('');
-    setVerifiedResult(null);
-    setIsVerifyingBank(true);
-    try {
-      const res = await verifyNigerianBankAccount(bankName, accountNumber, currentStore.name);
-      setVerifiedResult(res);
-      if (res.verified) {
-        setVerifiedAccName(res.accountName); // Official provider-returned name
-        setVerificationMsg(res.message);
-      } else {
-        setVerificationMsg(res.message);
-      }
-    } catch (err: any) {
-      setVerificationMsg(err?.message || 'Bank account verification failed. Please check the 10-digit NUBAN number.');
-    } finally {
-      setIsVerifyingBank(false);
-    }
-  };
-
-  const handleSaveBank = async () => {
-    if (!verifiedResult || !verifiedResult.verified || !verifiedResult.accountName) {
-      alert('Please perform NUBAN verification first before saving.');
-      return;
-    }
-    setIsSavingBank(true);
-    try {
-      const savedBank = await saveSellerBankAccountInFirestore(currentStore.id, {
-        bankName: verifiedResult.bankName,
-        accountNumber: verifiedResult.accountNumber,
-        maskedAccountNumber: verifiedResult.maskedAccountNumber,
-        accountName: verifiedResult.accountName, // Official provider name ONLY
-        verificationStatus: 'verified',
-        providerReference: verifiedResult.providerReference,
-        verifiedAt: verifiedResult.verifiedAt,
-        nameMatchStatus: verifiedResult.nameMatchStatus,
-        nameMatchNotes: verifiedResult.nameMatchNotes
-      });
-      setBankAccount(savedBank);
-      setShowBankModal(false);
-      alert('Verified Nigerian Bank Account saved successfully! Seller payouts will now be disbursed strictly to this provider-verified account.');
-      await loadSellerData();
-    } catch (err: any) {
-      alert(err?.message || 'Failed to save bank account details.');
-    } finally {
-      setIsSavingBank(false);
     }
   };
 
@@ -760,41 +642,56 @@ export const SellerDashboardView: React.FC<SellerDashboardViewProps> = ({
 
             {/* Bank Account Overview Pill */}
             {bankAccount && bankAccount.verificationStatus === 'verified' ? (
-              <div className="flex items-center justify-between bg-slate-950/80 p-4 rounded-2xl border border-emerald-500/30 text-xs">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                    <Building className="w-5 h-5" />
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-slate-950/90 p-4 sm:p-5 rounded-2xl border border-emerald-500/40 text-xs gap-4 shadow-xl">
+                <div className="flex items-start sm:items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0 mt-0.5 sm:mt-0">
+                    <Building2 className="w-5 h-5" />
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-extrabold text-white text-sm">{bankAccount.bankName}</span>
-                      <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Verified NUBAN
+                      <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-black flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                        {bankAccount.provider || 'Paystack'} Verified NUBAN
                       </span>
                     </div>
-                    <p className="text-slate-400 text-xs mt-0.5">
-                      Account: <strong className="text-slate-200">{bankAccount.accountNumber}</strong> | Name: <strong className="text-slate-200">{bankAccount.accountName}</strong>
+                    <div className="text-slate-300 text-xs space-y-0.5">
+                      <p>
+                        Account: <strong className="text-cyan-400 font-mono tracking-wider">{bankAccount.maskedAccountNumber || bankAccount.accountNumber}</strong>
+                      </p>
+                      <p>
+                        Official Holder: <strong className="text-emerald-400 font-mono">{bankAccount.accountName}</strong>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 self-end sm:self-center">
+                  <button
+                    onClick={() => setShowBankModal(true)}
+                    className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 hover:border-cyan-500/50 font-bold rounded-xl text-xs transition-all flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Change Bank Account</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-amber-500/10 p-4 sm:p-5 rounded-2xl border border-amber-500/30 text-xs gap-3">
+                <div className="flex items-start sm:items-center gap-3 text-amber-300">
+                  <AlertTriangle className="w-5 h-5 shrink-0 text-amber-400 mt-0.5 sm:mt-0" />
+                  <div className="space-y-0.5">
+                    <span className="font-bold text-sm text-amber-200">Real Bank Account Verification Required</span>
+                    <p className="text-slate-300 text-xs">
+                      Withdrawals and automated earnings disbursement require a verified 10-digit Nigerian NUBAN account validated through live interbank resolution.
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setShowBankModal(true)}
-                  className="text-xs text-cyan-400 hover:underline font-bold"
+                  className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-400 text-slate-950 font-black text-xs rounded-xl hover:from-amber-400 hover:to-amber-300 transition-all shrink-0 flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/20"
                 >
-                  Edit Bank
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between bg-amber-500/10 p-4 rounded-2xl border border-amber-500/30 text-xs">
-                <div className="flex items-center gap-3 text-amber-300">
-                  <AlertTriangle className="w-5 h-5 shrink-0 text-amber-400" />
-                  <span><strong>Bank Account Verification Required:</strong> Please connect and verify your 10-digit NUBAN Nigerian Bank Account to enable payouts.</span>
-                </div>
-                <button
-                  onClick={() => setShowBankModal(true)}
-                  className="px-4 py-1.5 bg-amber-500 text-slate-950 font-black text-xs rounded-lg hover:bg-amber-400 transition-colors shrink-0"
-                >
-                  Verify Bank Now
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Verify Bank Account</span>
                 </button>
               </div>
             )}
@@ -1385,139 +1282,19 @@ export const SellerDashboardView: React.FC<SellerDashboardViewProps> = ({
         </div>
       )}
 
-      {/* MODAL 2: BANK ACCOUNT VERIFICATION MODAL */}
-      {showBankModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 text-white rounded-3xl p-6 sm:p-8 max-w-lg w-full space-y-6 shadow-2xl relative">
-            <button
-              onClick={() => setShowBankModal(false)}
-              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full bg-slate-800"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="space-y-2 text-left">
-              <div className="flex items-center gap-2 text-cyan-400 text-xs font-black uppercase">
-                <Building2 className="w-4 h-4" />
-                <span>NUBAN BANK VERIFICATION SERVICE</span>
-              </div>
-              <h3 className="text-2xl font-black">Verify Nigerian Bank Account</h3>
-              <p className="text-xs text-slate-400">
-                Enter your 10-digit NUBAN account number. Our engine resolves the verified account holder name via interbank lookups.
-              </p>
-            </div>
-
-            {verificationMsg && (
-              <div className={`p-4 rounded-xl text-xs font-bold border ${verifiedAccName ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}>
-                {verificationMsg}
-              </div>
-            )}
-
-            <div className="space-y-4 text-left">
-              <div className="space-y-1">
-                <label className="text-xs font-extrabold uppercase text-slate-300">Select Nigerian Bank</label>
-                <select
-                  value={bankName}
-                  onChange={(e) => handleBankNameChange(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-cyan-500"
-                >
-                  {NIGERIAN_BANKS.map((b) => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-extrabold uppercase text-slate-300">10-Digit NUBAN Account Number</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    maxLength={10}
-                    placeholder="0123456789"
-                    value={accountNumber}
-                    onChange={(e) => handleAccountNumberChange(e.target.value)}
-                    className="flex-1 px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm font-mono tracking-widest text-white focus:outline-none focus:border-cyan-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleVerifyBank}
-                    disabled={isVerifyingBank || accountNumber.length !== 10}
-                    className="px-4 py-3 bg-cyan-500 text-slate-950 font-extrabold text-xs rounded-xl shadow hover:bg-cyan-400 transition-colors disabled:opacity-50"
-                  >
-                    {isVerifyingBank ? 'Verifying...' : 'Verify NUBAN'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Verified Result Card returned directly from Provider */}
-              {verifiedResult && verifiedResult.verified && (
-                <div className="p-4 bg-slate-950 border border-emerald-500/40 rounded-2xl space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                    <div className="flex items-center gap-1.5 text-emerald-400 font-extrabold text-xs">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <span>✓ Account Verified by Bank Provider</span>
-                    </div>
-                    <span className="text-[10px] font-mono text-cyan-400">
-                      Ref: {verifiedResult.providerReference}
-                    </span>
-                  </div>
-
-                  <div className="space-y-2 text-xs">
-                    <div>
-                      <span className="text-[10px] uppercase text-slate-400 font-black tracking-wider block">Official Registered Account Holder Name</span>
-                      <div className="p-3 bg-slate-900 border border-emerald-500/30 rounded-xl mt-1">
-                        <p className="font-black text-white text-base tracking-wide">{verifiedResult.accountName}</p>
-                        <span className="text-[10px] text-emerald-400 font-semibold block mt-0.5 flex items-center gap-1">
-                          <Lock className="w-3 h-3 text-emerald-400 inline" /> Provider-verified official account name (Non-editable)
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      <div className="p-2.5 bg-slate-900/80 rounded-xl border border-slate-800">
-                        <span className="text-[10px] uppercase text-slate-400 font-bold block">Account Number</span>
-                        <span className="font-mono font-black text-slate-200 text-sm">{verifiedResult.maskedAccountNumber}</span>
-                      </div>
-                      <div className="p-2.5 bg-slate-900/80 rounded-xl border border-slate-800">
-                        <span className="text-[10px] uppercase text-slate-400 font-bold block">Bank Name</span>
-                        <span className="font-bold text-slate-200 text-sm">{verifiedResult.bankName}</span>
-                      </div>
-                    </div>
-
-                    {/* Name Compatibility Warning */}
-                    {verifiedResult.nameMatchStatus === 'mismatch' ? (
-                      <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 space-y-1 text-xs">
-                        <div className="flex items-center gap-1.5 font-bold">
-                          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                          <span>Name Mismatch Notice</span>
-                        </div>
-                        <p className="text-[11px] text-amber-200">
-                          Official bank account name (<strong>{verifiedResult.accountName}</strong>) differs from your store profile (<strong>{currentStore.name}</strong>).
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-300 text-[11px] flex items-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <span>Registered seller identity matches bank record.</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={handleSaveBank}
-                disabled={!verifiedResult || !verifiedResult.verified || isSavingBank}
-                className="w-full py-3.5 bg-emerald-500 text-slate-950 font-black text-sm rounded-xl shadow-lg hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                <CheckCircle2 className="w-5 h-5" />
-                <span>{isSavingBank ? 'Saving Bank Details...' : 'Confirm & Save Verified NGN Bank Account'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* REAL NIGERIAN BANK VERIFICATION MODAL */}
+      <SellerBankVerificationModal
+        isOpen={showBankModal}
+        onClose={() => setShowBankModal(false)}
+        sellerId={currentStore.id}
+        sellerName={currentStore.name}
+        currentBankAccount={bankAccount}
+        onBankAccountUpdated={(updatedBank) => {
+          setBankAccount(updatedBank);
+          setShowBankModal(false);
+          loadSellerData();
+        }}
+      />
 
       {/* Product Deletion Confirmation Dialog Modal */}
       {productToDelete && (

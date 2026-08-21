@@ -3,6 +3,7 @@ import path from 'path';
 import compression from 'compression';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import { getActiveBankVerificationProvider } from './server/bankVerificationProvider';
 import { 
   PRODUCTS, 
   TECH_SERVICES, 
@@ -580,53 +581,130 @@ app.post('/api/v1/ai/admin', async (req, res) => {
   }
 });
 
-// 6. Secure Backend Bank Account NUBAN Verification Endpoint
+// 6. Real Nigerian Bank Verification Endpoints (Backend Server-Authoritative)
+
+// A. Check active verification provider configuration status
+app.get('/api/v1/bank/provider-status', (req, res) => {
+  try {
+    const provider = getActiveBankVerificationProvider();
+    const isConfigured = provider.isConfigured();
+    const missing = provider.getMissingCredentials();
+
+    res.json({
+      configured: isConfigured,
+      provider: provider.name,
+      missingCredentials: missing,
+      message: isConfigured
+        ? `Bank verification service is active using real ${provider.name} interbank NUBAN resolution.`
+        : `Bank verification service is offline. Missing required server credential(s): ${missing.join(', ')}. Set these environment variables in Settings.`
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      configured: false,
+      provider: 'unknown',
+      message: err?.message || 'Error checking bank verification provider status.'
+    });
+  }
+});
+
+// B. Fetch Dynamic List of Verified Nigerian Banks from Provider
+app.get('/api/v1/bank/banks', async (req, res) => {
+  try {
+    const provider = getActiveBankVerificationProvider();
+    if (!provider.isConfigured()) {
+      return res.status(503).json({
+        success: false,
+        configured: false,
+        provider: provider.name,
+        missingCredentials: provider.getMissingCredentials(),
+        banks: [],
+        message: `Live Nigerian bank list is unavailable because ${provider.name} credentials (${provider.getMissingCredentials().join(', ')}) are not configured on the server.`
+      });
+    }
+
+    const result = await provider.getBanks();
+    if (!result.success) {
+      return res.status(502).json({
+        success: false,
+        configured: true,
+        provider: provider.name,
+        banks: [],
+        message: result.message || 'Failed to retrieve live bank list from payment provider.'
+      });
+    }
+
+    res.json({
+      success: true,
+      configured: true,
+      provider: provider.name,
+      banks: result.banks,
+      fromCache: result.fromCache || false
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      configured: false,
+      banks: [],
+      message: err?.message || 'Internal server error while fetching banks.'
+    });
+  }
+});
+
+// C. Real NUBAN Interbank Account Resolution
 app.post('/api/v1/bank/verify', async (req, res) => {
   try {
-    const { bankName, accountNumber, sellerProfileName } = req.body;
+    const { bankName, bankCode, accountNumber, sellerId } = req.body;
     const cleanAcc = (accountNumber || '').replace(/\D/g, '');
+    const cleanCode = (bankCode || '').trim();
 
     if (!cleanAcc || cleanAcc.length !== 10) {
       return res.status(400).json({
         verified: false,
+        status: 'INVALID_INPUT',
+        errorCode: 'INVALID_NUBAN_LENGTH',
         message: 'Invalid NUBAN account number. Nigerian bank account numbers must be exactly 10 numeric digits.'
       });
     }
 
-    if (!bankName) {
+    if (!cleanCode && !bankName) {
       return res.status(400).json({
         verified: false,
+        status: 'INVALID_INPUT',
+        errorCode: 'MISSING_BANK',
         message: 'Please select a valid Nigerian bank.'
       });
     }
 
-    // Official Interbank Paystack/Interswitch NUBAN Lookup Resolution
-    let officialName = 'JOHN EMMANUEL OKONKWO';
-    if (cleanAcc.startsWith('0') || cleanAcc.startsWith('1')) officialName = 'AMINA BELLO TRADING';
-    else if (cleanAcc.startsWith('2') || cleanAcc.startsWith('3')) officialName = 'CHUKWUEMEKA DAVID NWACHUKWU';
-    else if (cleanAcc.startsWith('4') || cleanAcc.startsWith('5')) officialName = 'EMMANUEL OKONKWO MERCHANDISE';
-    else if (cleanAcc.startsWith('6') || cleanAcc.startsWith('7')) officialName = 'KILANBA TECH VENTURES';
-    else if (cleanAcc.startsWith('8')) officialName = 'YUSUF ADENIJI ENTERPRISES';
-    else officialName = 'FOLAKE BUKOLA OGUNLEYE';
+    const provider = getActiveBankVerificationProvider();
 
-    const maskedAcc = `••••••${cleanAcc.slice(-4)}`;
-    const providerRef = `NEXO_NUBAN_REF_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
-    const verifiedAt = new Date().toISOString();
+    // Check if provider is configured - Fail safely if missing secrets
+    if (!provider.isConfigured()) {
+      const missing = provider.getMissingCredentials();
+      return res.status(503).json({
+        verified: false,
+        status: 'CONFIG_REQUIRED',
+        errorCode: 'MISSING_PROVIDER_CREDENTIALS',
+        provider: provider.name,
+        missingCredentials: missing,
+        message: `Real bank verification cannot proceed because server API credentials (${missing.join(', ')}) are not configured in environment variables. Please configure ${missing.join(', ')} in Settings.`
+      });
+    }
 
-    res.json({
-      verified: true,
-      accountName: officialName,
-      bankName,
-      accountNumber: cleanAcc,
-      maskedAccountNumber: maskedAcc,
-      providerReference: providerRef,
-      verifiedAt,
-      message: 'Official bank account holder name successfully retrieved from NUBAN verification provider.'
-    });
+    // Call real provider NUBAN resolution engine
+    const verificationResult = await provider.resolveAccount(cleanAcc, cleanCode, bankName);
+
+    if (!verificationResult.verified) {
+      return res.status(422).json(verificationResult);
+    }
+
+    // Return the genuine provider verified account holder name
+    res.json(verificationResult);
   } catch (err: any) {
     res.status(500).json({
       verified: false,
-      message: err?.message || 'Bank account verification failed.'
+      status: 'PROVIDER_UNAVAILABLE',
+      errorCode: 'INTERNAL_ERROR',
+      message: err?.message || 'Bank account verification service encountered an unexpected error.'
     });
   }
 });

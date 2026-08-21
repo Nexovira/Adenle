@@ -66,8 +66,11 @@ import {
   saveSellerConfigInFirestore,
   getAllSellerPayoutsFromFirestore,
   updateSellerPayoutStatusInFirestore,
-  getAuditLogsFromFirestore
+  getAuditLogsFromFirestore,
+  fetchBankVerificationProviderStatus,
+  fetchSellerBankAccountAuditLogs
 } from '../lib/firestoreService';
+import { SellerBankAccountAuditLog } from '../types';
 
 interface AdminDashboardViewProps {
   onNavigate?: (path: string) => void;
@@ -88,6 +91,17 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
   });
   const [sellerPayouts, setSellerPayouts] = useState<SellerPayoutRecord[]>([]);
   const [savingSellerConfig, setSavingSellerConfig] = useState(false);
+  const [bankProviderStatus, setBankProviderStatus] = useState<{
+    configured: boolean;
+    provider: string;
+    missingCredentials?: string[];
+    message: string;
+  }>({
+    configured: false,
+    provider: 'Paystack',
+    message: 'Checking provider status...'
+  });
+  const [sellerBankAuditLogs, setSellerBankAuditLogs] = useState<SellerBankAccountAuditLog[]>([]);
 
   // Data State
   const [products, setProducts] = useState<Product[]>([]);
@@ -146,7 +160,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
   const loadData = async () => {
     setLoadingData(true);
     try {
-      const [prods, cats, ords, settings, servs, escrows, affCfg, affProfs, finSnaps, payouts, comms, selCfg, selPayouts, aLogs] = await Promise.all([
+      const [prods, cats, ords, settings, servs, escrows, affCfg, affProfs, finSnaps, payouts, comms, selCfg, selPayouts, aLogs, bankProv, bankAudits] = await Promise.all([
         getProductsFromFirestore(),
         getCategoriesFromFirestore(),
         getOrdersFromFirestore(undefined, true),
@@ -160,7 +174,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
         getAllCommissionsFromFirestore(),
         getSellerConfigFromFirestore(),
         getAllSellerPayoutsFromFirestore(),
-        getAuditLogsFromFirestore()
+        getAuditLogsFromFirestore(),
+        fetchBankVerificationProviderStatus(),
+        fetchSellerBankAccountAuditLogs()
       ]);
       setProducts(prods);
       setCategories(cats);
@@ -176,6 +192,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
       setSellerConfig(selCfg);
       setSellerPayouts(selPayouts);
       setAuditLogs(aLogs);
+      if (bankProv) setBankProviderStatus(bankProv);
+      if (bankAudits) setSellerBankAuditLogs(bankAudits);
     } catch (err) {
       console.error('Error loading admin data:', err);
     } finally {
@@ -1353,6 +1371,106 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
                 </table>
               </div>
             )}
+          </div>
+
+          {/* Seller Bank Verification Provider Health & Audit Trail */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Card 1: Bank Verification Engine Health */}
+            <div className="p-6 bg-slate-900 border border-slate-800 rounded-3xl space-y-4 text-xs shadow-md">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2 text-cyan-400 font-black">
+                  <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                  <span>NUBAN Verification Engine</span>
+                </div>
+                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
+                  bankProviderStatus.configured 
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                }`}>
+                  {bankProviderStatus.configured ? 'ONLINE' : 'CONFIG REQUIRED'}
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between text-slate-400">
+                  <span>Active Connector:</span>
+                  <strong className="text-white">{bankProviderStatus.provider}</strong>
+                </div>
+                <div className="flex justify-between text-slate-400">
+                  <span>Backend Status:</span>
+                  <strong className={bankProviderStatus.configured ? 'text-emerald-400' : 'text-amber-400'}>
+                    {bankProviderStatus.configured ? 'Verified & Connected' : 'Missing API Credentials'}
+                  </strong>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed pt-1">
+                  {bankProviderStatus.message}
+                </p>
+              </div>
+
+              {bankProviderStatus.missingCredentials && bankProviderStatus.missingCredentials.length > 0 && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-1 text-amber-300">
+                  <span className="font-bold text-[10px] uppercase">Missing Environment Secret:</span>
+                  <p className="font-mono text-[11px]">{bankProviderStatus.missingCredentials.join(', ')}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Card 2 & 3: Live Seller Bank Audit Trail */}
+            <div className="lg:col-span-2 p-6 bg-slate-900 border border-slate-800 rounded-3xl space-y-4 text-xs shadow-md">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2 text-emerald-400 font-black">
+                  <History className="w-4 h-4 text-emerald-400" />
+                  <span>Seller Bank Verification Audit Trail ({sellerBankAuditLogs.length})</span>
+                </div>
+                <span className="text-[10px] text-slate-400 font-mono">Immutable Interbank Lookup Logs</span>
+              </div>
+
+              {sellerBankAuditLogs.length === 0 ? (
+                <div className="py-8 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-2xl">
+                  No seller bank verification events recorded yet.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {sellerBankAuditLogs.slice(0, 10).map((log) => (
+                    <div key={log.id} className="p-3 bg-slate-950 border border-slate-800/80 rounded-xl flex items-center justify-between gap-3 text-xs">
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${
+                            log.action === 'BANK_ACCOUNT_CONFIRMED' || log.action === 'VERIFICATION_SUCCEEDED'
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : log.action === 'VERIFICATION_FAILED'
+                                ? 'bg-rose-500/20 text-rose-300'
+                                : 'bg-amber-500/20 text-amber-300'
+                          }`}>
+                            {log.action}
+                          </span>
+                          <span className="font-bold text-white truncate">
+                            {log.sellerName || log.sellerId}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-300">
+                          {log.bankName} (<span className="font-mono text-cyan-400">{log.accountNumberMasked}</span>)
+                          {log.newAccountName && (
+                            <span className="ml-1 text-emerald-400 font-mono">
+                              — {log.newAccountName}
+                            </span>
+                          )}
+                        </div>
+                        {log.providerReference && (
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            Ref: {log.providerReference}
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-500 font-mono shrink-0">
+                        {new Date(log.timestamp).toLocaleDateString('en-NG')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
