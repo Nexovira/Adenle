@@ -270,6 +270,13 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
+    // User Notification Preferences & Wishlist Alert Subscriptions
+    match /user_notification_settings/{id} {
+      allow read: if isSignedIn() && (request.auth.uid == id || resource.data.userId == request.auth.uid || isAdmin());
+      allow create, update: if isSignedIn() && (request.auth.uid == id || incoming().userId == request.auth.uid || isAdmin());
+      allow delete: if isAdmin() || (isSignedIn() && (request.auth.uid == id || resource.data.userId == request.auth.uid));
+    }
+
     // Users: signed in self or admin read/write (prevents self-escalation to admin role)
     match /users/{uid} {
       allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());

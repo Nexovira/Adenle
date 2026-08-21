@@ -41,7 +41,9 @@ import {
   CourseEnrollment,
   CurrencyCode,
   AffiliateNotification,
-  SecurityAuditLog
+  SecurityAuditLog,
+  WishlistNotificationPreferences,
+  PriceAlertNotification
 } from '../types';
 import { PRODUCTS, CATEGORIES, TECH_SERVICES } from '../data/mockData';
 import { convertDirectly } from './currency';
@@ -3233,6 +3235,190 @@ export async function updateSellerPayoutStatusInFirestore(
   } catch (err) {
     console.error('Error updating seller payout status:', err);
   }
+}
+
+// -------------------------------------------------------------
+// 30. User Notification & Wishlist Alert Preferences
+// -------------------------------------------------------------
+
+export const DEFAULT_NOTIFICATION_PREFERENCES: WishlistNotificationPreferences = {
+  emailAlertsEnabled: true,
+  wishlistBackInStock: true,
+  wishlistPriceDrops: true,
+  stockThresholdAlerts: true,
+  dailyPriceSummary: false,
+  minimumDiscountPercent: 5,
+  updatedAt: new Date().toISOString()
+};
+
+/**
+ * Retrieves the customer's notification and wishlist alert subscription preferences from Firestore
+ */
+export async function getUserNotificationPreferencesFromFirestore(uid: string): Promise<WishlistNotificationPreferences> {
+  if (!uid) return DEFAULT_NOTIFICATION_PREFERENCES;
+
+  const localKey = `nexovira_notif_prefs_${uid}`;
+  let localPrefs: WishlistNotificationPreferences | null = null;
+  try {
+    const raw = localStorage.getItem(localKey);
+    if (raw) localPrefs = JSON.parse(raw);
+  } catch {}
+
+  try {
+    // 1. Try reading from users/{uid}
+    const userDocRef = doc(db, 'users', uid);
+    const userSnap = await getDoc(userDocRef);
+
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+      if (userData.notificationPreferences) {
+        const merged: WishlistNotificationPreferences = {
+          ...DEFAULT_NOTIFICATION_PREFERENCES,
+          ...userData.notificationPreferences,
+          notificationEmail: userData.notificationPreferences.notificationEmail || userData.email || ''
+        };
+        try { localStorage.setItem(localKey, JSON.stringify(merged)); } catch {}
+        return merged;
+      }
+    }
+
+    // 2. Try user_notification_settings/{uid} fallback
+    const settingsDocRef = doc(db, 'user_notification_settings', uid);
+    const settingsSnap = await getDoc(settingsDocRef);
+    if (settingsSnap.exists()) {
+      const merged: WishlistNotificationPreferences = {
+        ...DEFAULT_NOTIFICATION_PREFERENCES,
+        ...settingsSnap.data()
+      };
+      try { localStorage.setItem(localKey, JSON.stringify(merged)); } catch {}
+      return merged;
+    }
+  } catch (err) {
+    console.warn('Could not read notification preferences from Firestore, returning cached or default:', err);
+  }
+
+  return localPrefs || DEFAULT_NOTIFICATION_PREFERENCES;
+}
+
+/**
+ * Saves or updates the customer's wishlist & email alert subscription preferences in Firestore
+ */
+export async function saveUserNotificationPreferencesToFirestore(
+  uid: string,
+  preferences: Partial<WishlistNotificationPreferences>
+): Promise<WishlistNotificationPreferences> {
+  const localKey = `nexovira_notif_prefs_${uid}`;
+  const nowIso = new Date().toISOString();
+
+  const current = await getUserNotificationPreferencesFromFirestore(uid);
+  const updated: WishlistNotificationPreferences = {
+    ...current,
+    ...preferences,
+    updatedAt: nowIso
+  };
+
+  // Immediate local cache update
+  try {
+    localStorage.setItem(localKey, JSON.stringify(updated));
+    const userProfileRaw = localStorage.getItem('nexovira_user_profile');
+    if (userProfileRaw) {
+      const parsedProfile = JSON.parse(userProfileRaw);
+      parsedProfile.notificationPreferences = updated;
+      localStorage.setItem('nexovira_user_profile', JSON.stringify(parsedProfile));
+    }
+  } catch {}
+
+  // Firestore update
+  try {
+    const userDocRef = doc(db, 'users', uid);
+    await setDoc(userDocRef, {
+      notificationPreferences: updated,
+      updatedAt: nowIso
+    }, { merge: true });
+
+    // Also write to user_notification_settings collection
+    const settingsDocRef = doc(db, 'user_notification_settings', uid);
+    await setDoc(settingsDocRef, sanitizeFirestoreData({
+      userId: uid,
+      ...updated,
+      createdAt: nowIso
+    }), { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, `users/${uid}/notificationPreferences`);
+  }
+
+  // Dispatch event for reactive listeners
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nexovira_notif_preferences_changed', { detail: updated }));
+  }
+
+  return updated;
+}
+
+/**
+ * Simulates a real-time wishlist notification alert (Back-in-Stock or Price Drop)
+ * and writes to the user's notification stream in Firestore
+ */
+export async function dispatchWishlistAlertSimulation(
+  userId: string,
+  type: 'BACK_IN_STOCK' | 'PRICE_DROP' | 'LOW_STOCK',
+  product: Product,
+  customMessage?: string
+): Promise<PriceAlertNotification> {
+  const notifId = `wishlist_notif_${userId}_${Date.now()}`;
+  const nowIso = new Date().toISOString();
+
+  let message = customMessage;
+  if (!message) {
+    if (type === 'BACK_IN_STOCK') {
+      message = `Great news! "${product.title}" is officially BACK IN STOCK with priority dispatch available!`;
+    } else if (type === 'PRICE_DROP') {
+      message = `Price Drop Alert! Wishlisted item "${product.title}" has dropped to $${product.price} USD!`;
+    } else {
+      message = `Hurry! Only ${product.stock || 2} units left of wishlisted item "${product.title}".`;
+    }
+  }
+
+  const newNotif: PriceAlertNotification = {
+    id: notifId,
+    userId,
+    alertId: `alert_${product.id}`,
+    type,
+    productId: product.id,
+    productTitle: product.title,
+    productImage: product.images[0] || 'https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=800&auto=format&fit=crop&q=80',
+    oldPriceUSD: product.originalPrice || product.price + 50,
+    newPriceUSD: product.price,
+    targetPriceUSD: product.price,
+    discountPercent: product.discountPercentage || 15,
+    currency: (product.currency as CurrencyCode) || 'NGN',
+    read: false,
+    message,
+    createdAt: nowIso
+  };
+
+  // 1. Write to local storage notification cache
+  try {
+    const raw = localStorage.getItem('nexovira_price_notifs_local');
+    const existingList: PriceAlertNotification[] = raw ? JSON.parse(raw) : [];
+    existingList.unshift(newNotif);
+    localStorage.setItem('nexovira_price_notifs_local', JSON.stringify(existingList));
+  } catch {}
+
+  // 2. Write to Firestore notifications collection
+  try {
+    const notifRef = doc(db, 'notifications', notifId);
+    await setDoc(notifRef, sanitizeFirestoreData(newNotif));
+  } catch (err) {
+    console.warn('Could not write simulation notif to Firestore:', err);
+  }
+
+  // 3. Dispatch window events for instant UI update on the bell icon & toasts
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nexovira_price_alert_triggered', { detail: newNotif }));
+  }
+
+  return newNotif;
 }
 
 

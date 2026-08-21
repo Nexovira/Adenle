@@ -110,6 +110,22 @@
         "createdAt": { "type": "string" }
       },
       "required": ["productId", "customerId", "rating", "comment"]
+    },
+    "NotificationPreference": {
+      "title": "NotificationPreference",
+      "description": "User notification preferences and wishlist back-in-stock / price drop email alert subscriptions",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "emailAlertsEnabled": { "type": "boolean" },
+        "wishlistBackInStock": { "type": "boolean" },
+        "wishlistPriceDrops": { "type": "boolean" },
+        "stockThresholdAlerts": { "type": "boolean" },
+        "dailyPriceSummary": { "type": "boolean" },
+        "minimumDiscountPercent": { "type": "number" },
+        "notificationEmail": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
     }
   },
   "firestore": {
@@ -124,6 +140,12 @@
         "$ref": "#/entities/Review"
       },
       "description": "Customer ratings and reviews on marketplace catalog products"
+    },
+    "/user_notification_settings/{userId}": {
+      "schema": {
+        "$ref": "#/entities/NotificationPreference"
+      },
+      "description": "User email alert subscription settings and back-in-stock / price drop triggers for wishlisted products"
     },
     "/system_configs/{configId}": {
       "schema": {

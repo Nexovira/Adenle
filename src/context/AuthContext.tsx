@@ -15,6 +15,7 @@ import {
   applyForAffiliateProgramInFirestore,
   sanitizeFirestoreData
 } from '../lib/firestoreService';
+import { WishlistNotificationPreferences } from '../types';
 
 export interface UserProfile {
   uid: string;
@@ -25,6 +26,7 @@ export interface UserProfile {
   isAffiliate?: boolean;
   affiliateCode?: string;
   affiliateId?: string;
+  notificationPreferences?: WishlistNotificationPreferences;
   addresses?: Array<{ id: string; fullName: string; street: string; city: string; country: string; phone: string; default: boolean }>;
   createdAt: string;
 }

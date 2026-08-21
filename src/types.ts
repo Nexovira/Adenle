@@ -639,6 +639,17 @@ export interface AffiliateNotification {
   createdAt: string;
 }
 
+export interface WishlistNotificationPreferences {
+  emailAlertsEnabled: boolean;           // Master toggle for email alert notifications
+  wishlistBackInStock: boolean;          // Opt-in for back-in-stock email alerts on wishlisted items
+  wishlistPriceDrops: boolean;           // Opt-in for price drop and flash sale alerts on wishlisted items
+  stockThresholdAlerts?: boolean;        // Low stock warnings (< 5 left)
+  dailyPriceSummary?: boolean;           // Daily digest of wishlist opportunities
+  minimumDiscountPercent?: number;       // Minimum price drop % to trigger alert (e.g. 5, 10, 15)
+  notificationEmail?: string;            // Preferred notification email
+  updatedAt?: string;
+}
+
 export interface PriceAlert {
   id: string;
   userId: string;
@@ -665,15 +676,17 @@ export interface PriceAlertNotification {
   id: string;
   userId: string;
   alertId: string;
+  type?: 'PRICE_DROP' | 'BACK_IN_STOCK' | 'LOW_STOCK' | 'WISHLIST_ALERT';
   productId: string;
   productTitle: string;
   productImage: string;
-  oldPriceUSD: number;
-  newPriceUSD: number;
-  targetPriceUSD: number;
-  discountPercent: number;
+  oldPriceUSD?: number;
+  newPriceUSD?: number;
+  targetPriceUSD?: number;
+  discountPercent?: number;
   currency: CurrencyCode;
   read: boolean;
+  message?: string;
   createdAt: string;
 }
 
