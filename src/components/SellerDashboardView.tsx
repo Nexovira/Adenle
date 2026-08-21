@@ -533,7 +533,13 @@ export const SellerDashboardView: React.FC<SellerDashboardViewProps> = ({
         <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: `url(${currentStore.banner})` }} />
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-4">
-            <img src={currentStore.logo} alt={currentStore.name} referrerPolicy="no-referrer" className="w-16 h-16 rounded-2xl object-cover border-2 border-cyan-400 shadow-md" />
+            <img 
+              src={currentStore.logo || '/nexovira.jpeg'} 
+              alt={currentStore.name} 
+              referrerPolicy="no-referrer" 
+              onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/nexovira.jpeg'; }}
+              className="w-16 h-16 rounded-2xl object-cover border-2 border-cyan-400 shadow-md" 
+            />
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-black">{currentStore.name}</h1>

@@ -32,6 +32,12 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+// Serve Assets Directory & Brand Logo directly
+app.use('/assets', express.static(path.join(process.cwd(), 'assets')));
+app.get('/nexovira.jpeg', (req, res) => {
+  res.sendFile(path.join(process.cwd(), 'assets', 'nexovira.jpeg'));
+});
+
 // Initialize Server-Side Gemini API SDK safely
 let aiClient: GoogleGenAI | null = null;
 function getAIClient(): GoogleGenAI {

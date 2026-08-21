@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Sparkles, X, Send, Bot, User, ShoppingCart, Check, ShieldCheck, RefreshCw, ChevronRight } from 'lucide-react';
 import { Product, AIMessage } from '../types';
+import { NexoviraLogo } from './NexoviraLogo';
 
 interface AIAssistantModalProps {
   isOpen: boolean;
@@ -109,9 +110,7 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
         {/* Header */}
         <div className="px-6 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 text-slate-950 shadow-lg shadow-cyan-500/20">
-              <Sparkles className="w-5 h-5 fill-current" />
-            </div>
+            <NexoviraLogo size={38} showText={false} />
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-extrabold text-white text-base">NEXOVIRA AI Shopping Assistant</h3>
@@ -140,15 +139,15 @@ export const AIAssistantModal: React.FC<AIAssistantModalProps> = ({
                 msg.sender === 'user' ? 'ml-auto flex-row-reverse' : ''
               }`}
             >
-              <div
-                className={`w-9 h-9 rounded-2xl shrink-0 flex items-center justify-center text-xs font-bold ${
-                  msg.sender === 'user'
-                    ? 'bg-slate-800 text-white'
-                    : 'bg-gradient-to-tr from-cyan-500 to-blue-600 text-slate-950'
-                }`}
-              >
-                {msg.sender === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-5 h-5" />}
-              </div>
+              {msg.sender === 'user' ? (
+                <div className="w-9 h-9 rounded-2xl shrink-0 flex items-center justify-center text-xs font-bold bg-slate-800 text-white">
+                  <User className="w-4 h-4" />
+                </div>
+              ) : (
+                <div className="shrink-0">
+                  <NexoviraLogo size={36} showText={false} />
+                </div>
+              )}
 
               <div className="space-y-3 flex-1">
                 <div

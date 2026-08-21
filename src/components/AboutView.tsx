@@ -1,5 +1,6 @@
 import React from 'react';
 import { ShieldCheck, MapPin, Phone, MessageSquare, Award, Zap, Cpu, Sparkles } from 'lucide-react';
+import { NexoviraLogo } from './NexoviraLogo';
 
 interface AboutViewProps {
   onNavigate: (path: string) => void;
@@ -9,7 +10,9 @@ export const AboutView: React.FC<AboutViewProps> = ({ onNavigate }) => {
   return (
     <div className="max-w-6xl mx-auto px-4 py-12 text-left space-y-12">
       {/* Header */}
-      <div className="text-center space-y-4 max-w-3xl mx-auto">
+      <div className="text-center space-y-4 max-w-3xl mx-auto flex flex-col items-center">
+        <NexoviraLogo size={56} showText={false} />
+
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 text-xs font-bold">
           <Sparkles className="w-3.5 h-3.5" /> About NEXOVIRA Marketplace
         </span>

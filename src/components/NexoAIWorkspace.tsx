@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AIMessage, EcosystemIntent, CurrencyCode, Product, TechService, Course, DigitalProduct } from '../types';
 import { formatCurrency } from '../lib/currency';
+import { NexoviraLogo } from './NexoviraLogo';
 import { 
   Sparkles, 
   Send, 
@@ -152,8 +153,8 @@ export const NexoAIWorkspace: React.FC<NexoAIWorkspaceProps> = ({
               }`}
             >
               {msg.sender === 'assistant' && (
-                <div className="w-9 h-9 rounded-2xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-md">
-                  <Sparkles className="w-5 h-5" />
+                <div className="shrink-0">
+                  <NexoviraLogo size={36} showText={false} />
                 </div>
               )}
 

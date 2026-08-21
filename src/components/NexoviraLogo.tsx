@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import nexoviraLogoImg from '../assets/nexovira.jpeg';
 
 interface NexoviraLogoProps {
   className?: string;
@@ -7,6 +8,7 @@ interface NexoviraLogoProps {
   textClassName?: string;
   showTagline?: boolean;
   taglineClassName?: string;
+  imgClassName?: string;
 }
 
 export const NexoviraLogo: React.FC<NexoviraLogoProps> = ({
@@ -16,79 +18,24 @@ export const NexoviraLogo: React.FC<NexoviraLogoProps> = ({
   textClassName = 'text-xl font-bold tracking-tight',
   showTagline = false,
   taglineClassName = 'text-[10px] sm:text-xs font-semibold text-cyan-500 dark:text-cyan-400',
+  imgClassName = '',
 }) => {
+  const [imgError, setImgError] = useState(false);
+
   return (
     <div className={`inline-flex items-center gap-2.5 select-none ${className}`}>
-      {/* SVG Emblem mirroring the official angular "N" shield mark */}
-      <div className="relative flex items-center justify-center shrink-0">
-        <svg
-          width={size}
-          height={size}
-          viewBox="0 0 200 200"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          className="drop-shadow-[0_0_12px_rgba(0,240,255,0.4)] transition-transform duration-300 hover:scale-105"
-        >
-          <defs>
-            <linearGradient id="nexovira-cyan-main" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#A5F3FC" />
-              <stop offset="35%" stopColor="#00F0FF" />
-              <stop offset="70%" stopColor="#00B4D8" />
-              <stop offset="100%" stopColor="#0077B6" />
-            </linearGradient>
-            <linearGradient id="nexovira-glow" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#00F0FF" stopOpacity="0.8" />
-              <stop offset="100%" stopColor="#0077B6" stopOpacity="0.2" />
-            </linearGradient>
-            <filter id="glow-blur" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="8" result="blur" />
-              <feComposite in="SourceGraphic" in2="blur" operator="over" />
-            </filter>
-          </defs>
-
-          {/* Outer Shield Trace */}
-          <path
-            d="M 25 35 L 100 15 L 175 35 L 175 125 L 100 180 L 25 125 Z"
-            fill="#050C1A"
-            stroke="url(#nexovira-cyan-main)"
-            strokeWidth="3"
-            strokeOpacity="0.6"
-          />
-
-          {/* Stylized Geometric N Shield Struts */}
-          {/* Left Wing Pillar */}
-          <path
-            d="M 40 45 L 75 45 L 75 130 L 40 110 Z"
-            fill="url(#nexovira-cyan-main)"
-          />
-
-          {/* Diagonal Bridge */}
-          <path
-            d="M 65 45 L 160 120 L 160 145 L 125 145 L 40 70 Z"
-            fill="url(#nexovira-cyan-main)"
-          />
-
-          {/* Right Wing Pillar */}
-          <path
-            d="M 125 45 L 160 45 L 160 115 L 125 140 Z"
-            fill="url(#nexovira-cyan-main)"
-          />
-
-          {/* Top Inverted Specular Notch */}
-          <path
-            d="M 85 28 L 115 28 L 100 48 Z"
-            fill="#38BDF8"
-          />
-
-          {/* Bottom Accent Bar */}
-          <path
-            d="M 75 138 L 100 155 L 125 138 L 100 122 Z"
-            fill="url(#nexovira-cyan-main)"
-          />
-
-          {/* Ambient Flare Trace Line */}
-          <line x1="20" y1="185" x2="180" y2="185" stroke="url(#nexovira-glow)" strokeWidth="3" strokeLinecap="round" />
-        </svg>
+      {/* Official Nexovira Logo Image from /assets/nexovira.jpeg */}
+      <div 
+        className="relative flex items-center justify-center shrink-0 overflow-hidden rounded-xl bg-slate-950/40 border border-cyan-500/30 shadow-md shadow-cyan-500/10 transition-transform duration-300 hover:scale-105"
+        style={{ width: `${size}px`, height: `${size}px` }}
+      >
+        <img
+          src={imgError ? '/nexovira.jpeg' : (nexoviraLogoImg || '/nexovira.jpeg')}
+          alt="NEXOVIRA Logo"
+          referrerPolicy="no-referrer"
+          onError={() => setImgError(true)}
+          className={`w-full h-full object-cover rounded-xl ${imgClassName}`}
+        />
       </div>
 
       {showText && (

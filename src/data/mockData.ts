@@ -33,7 +33,7 @@ export const STORES: Store[] = [
   {
     id: 'store-1',
     name: 'NexaTech Global Store',
-    logo: 'https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=150&auto=format&fit=crop&q=80',
+    logo: '/nexovira.jpeg',
     banner: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=1200&auto=format&fit=crop&q=80',
     verified: true,
     status: 'verified',
