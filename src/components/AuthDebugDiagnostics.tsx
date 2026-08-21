@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { getAffiliateProfileFromFirestore } from '../lib/firestoreService';
-import { ShieldCheck, UserCheck, ShieldAlert, ChevronDown, ChevronUp, Bug } from 'lucide-react';
+import { ShieldCheck, UserCheck, ShieldAlert, ChevronDown, ChevronUp, Bug, LogOut, Sparkles } from 'lucide-react';
 
 interface AuthDebugDiagnosticsProps {
   activeView: string;
 }
 
 export const AuthDebugDiagnostics: React.FC<AuthDebugDiagnosticsProps> = ({ activeView }) => {
-  const { user, userProfile, isAdmin, isSeller, isAffiliate, loading } = useAuth();
+  const { user, userProfile, isAdmin, isSeller, isAffiliate, loading, loginAsPresetUser, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [hasAffiliateDoc, setHasAffiliateDoc] = useState<boolean | null>(null);
+  const [switchingRole, setSwitchingRole] = useState<string | null>(null);
 
   useEffect(() => {
     if (user?.uid) {
@@ -21,6 +22,17 @@ export const AuthDebugDiagnostics: React.FC<AuthDebugDiagnosticsProps> = ({ acti
       setHasAffiliateDoc(false);
     }
   }, [user?.uid]);
+
+  const handleSwitch = async (role: 'admin' | 'seller' | 'affiliate' | 'customer') => {
+    setSwitchingRole(role);
+    try {
+      await loginAsPresetUser(role);
+    } catch (e) {
+      console.error('Role switch failed:', e);
+    } finally {
+      setSwitchingRole(null);
+    }
+  };
 
   // Show only in non-production or when explicitly toggled
   return (
@@ -44,7 +56,7 @@ export const AuthDebugDiagnostics: React.FC<AuthDebugDiagnosticsProps> = ({ acti
             </div>
             <button
               onClick={() => setIsOpen(false)}
-              className="p-1 hover:bg-slate-800 text-slate-400 rounded-lg"
+              className="p-1 hover:bg-slate-800 text-slate-400 rounded-lg cursor-pointer"
             >
               <ChevronDown className="w-4 h-4" />
             </button>
@@ -98,6 +110,71 @@ export const AuthDebugDiagnostics: React.FC<AuthDebugDiagnosticsProps> = ({ acti
               <span className="font-bold text-amber-400">
                 /{activeView}
               </span>
+            </div>
+          </div>
+
+          {/* Instant Role Switcher */}
+          <div className="pt-2 border-t border-slate-800 space-y-1.5">
+            <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase">
+              <span className="flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-cyan-400" />
+                <span>Switch Test Persona</span>
+              </span>
+              {user && (
+                <button
+                  onClick={() => logout()}
+                  className="text-rose-400 hover:text-rose-300 flex items-center gap-0.5 cursor-pointer"
+                  title="Sign out"
+                >
+                  <LogOut className="w-3 h-3" /> Logout
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+              <button
+                onClick={() => handleSwitch('admin')}
+                disabled={switchingRole !== null}
+                className={`px-2 py-1.5 rounded-lg border text-left cursor-pointer transition-all ${
+                  userProfile?.role === 'admin'
+                    ? 'bg-purple-500/20 border-purple-500 text-purple-200 font-bold'
+                    : 'bg-slate-900 border-slate-800 hover:border-purple-500/40 text-slate-300'
+                }`}
+              >
+                👑 Admin Master
+              </button>
+              <button
+                onClick={() => handleSwitch('seller')}
+                disabled={switchingRole !== null}
+                className={`px-2 py-1.5 rounded-lg border text-left cursor-pointer transition-all ${
+                  userProfile?.role === 'seller'
+                    ? 'bg-cyan-500/20 border-cyan-500 text-cyan-200 font-bold'
+                    : 'bg-slate-900 border-slate-800 hover:border-cyan-500/40 text-slate-300'
+                }`}
+              >
+                🏪 Seller Store
+              </button>
+              <button
+                onClick={() => handleSwitch('affiliate')}
+                disabled={switchingRole !== null}
+                className={`px-2 py-1.5 rounded-lg border text-left cursor-pointer transition-all ${
+                  userProfile?.role === 'affiliate'
+                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-200 font-bold'
+                    : 'bg-slate-900 border-slate-800 hover:border-emerald-500/40 text-slate-300'
+                }`}
+              >
+                🤝 Affiliate
+              </button>
+              <button
+                onClick={() => handleSwitch('customer')}
+                disabled={switchingRole !== null}
+                className={`px-2 py-1.5 rounded-lg border text-left cursor-pointer transition-all ${
+                  userProfile?.role === 'customer'
+                    ? 'bg-blue-500/20 border-blue-500 text-blue-200 font-bold'
+                    : 'bg-slate-900 border-slate-800 hover:border-blue-500/40 text-slate-300'
+                }`}
+              >
+                🛍️ Shopper
+              </button>
             </div>
           </div>
         </div>

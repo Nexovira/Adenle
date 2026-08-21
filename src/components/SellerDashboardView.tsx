@@ -35,8 +35,10 @@ import {
   Info,
   X,
   Building2,
-  Sliders
+  Sliders,
+  LogOut
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { EbookProductUploadForm } from './EbookProductUploadForm';
 import { SellerBankVerificationModal } from './SellerBankVerificationModal';
 import { 
@@ -74,13 +76,16 @@ interface SellerDashboardViewProps {
   onAddProduct: (product: Product) => void;
   sellerId?: string;
   sellerName?: string;
+  onNavigate?: (path: string) => void;
 }
 
 export const SellerDashboardView: React.FC<SellerDashboardViewProps> = ({ 
   onAddProduct,
   sellerId: propSellerId,
-  sellerName: propSellerName
+  sellerName: propSellerName,
+  onNavigate
 }) => {
+  const { logout } = useAuth();
   const currentStore: Store = STORES[0]; // NexaTech Global Store fallback
   const resolvedSellerId = propSellerId || auth.currentUser?.uid || currentStore.id;
   const resolvedSellerName = propSellerName || auth.currentUser?.displayName || currentStore.name;
@@ -433,20 +438,31 @@ export const SellerDashboardView: React.FC<SellerDashboardViewProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={() => setActiveTab('wallet')}
-              className="px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-black text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/20 hover:scale-[1.02] transition-transform shrink-0"
+              className="px-5 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-black text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/20 hover:scale-[1.02] transition-transform shrink-0 cursor-pointer"
             >
               <Wallet className="w-4 h-4 fill-current" />
               <span>NGN Seller Wallet (₦{walletSummary.availableBalanceNGN.toLocaleString('en-NG')})</span>
             </button>
             <button
               onClick={() => setActiveTab('ai-generator')}
-              className="px-5 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-cyan-500/20 hover:scale-[1.02] transition-transform shrink-0"
+              className="px-5 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-cyan-500/20 hover:scale-[1.02] transition-transform shrink-0 cursor-pointer"
             >
               <Sparkles className="w-4 h-4 fill-current" />
               <span>AI Listing Studio</span>
+            </button>
+            <button
+              onClick={async () => {
+                await logout();
+                onNavigate && onNavigate('/signin');
+              }}
+              className="px-4 py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors shrink-0 cursor-pointer"
+              title="Sign Out of Merchant Store"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Sign Out</span>
             </button>
           </div>
         </div>

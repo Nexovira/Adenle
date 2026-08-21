@@ -40,6 +40,7 @@ interface AuthContextType {
   loading: boolean;
   signUpWithEmail: (email: string, pass: string, name: string, phone: string, role?: 'customer' | 'seller' | 'affiliate' | 'admin', autoSignIn?: boolean) => Promise<UserProfile | null>;
   signInWithEmail: (email: string, pass: string) => Promise<UserProfile | null>;
+  loginAsPresetUser: (presetRole: 'admin' | 'seller' | 'affiliate' | 'customer') => Promise<UserProfile | null>;
   signInWithGoogle: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -47,6 +48,37 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const PRESET_ACCOUNTS = {
+  admin: {
+    email: 'admin@nexovira.com',
+    pass: 'Admin@Nexovira2026',
+    name: 'NEXOVIRA Admin Master',
+    phone: '+234 911 044 3054',
+    role: 'admin' as const
+  },
+  seller: {
+    email: 'seller@nexovira.com',
+    pass: 'Seller@Nexovira2026',
+    name: 'NEXOVIRA Official Store',
+    phone: '+234 812 345 6789',
+    role: 'seller' as const
+  },
+  affiliate: {
+    email: 'affiliate@nexovira.com',
+    pass: 'Affiliate@Nexovira2026',
+    name: 'NEXOVIRA Elite Affiliate',
+    phone: '+234 809 876 5432',
+    role: 'affiliate' as const
+  },
+  customer: {
+    email: 'shopper@nexovira.com',
+    pass: 'Shopper@Nexovira2026',
+    name: 'Valued Shopper',
+    phone: '+234 800 000 0000',
+    role: 'customer' as const
+  }
+};
 
 const DEMO_ADMIN_PROFILE: UserProfile = {
   uid: 'admin-demo-uid-2026',
@@ -336,6 +368,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInWithEmail = async (email: string, pass: string): Promise<UserProfile | null> => {
     const lowerEmail = email.toLowerCase().trim();
+    const isEmailOwner = lowerEmail === 'nexovirasupport@gmail.com' || lowerEmail === 'admin@nexovira.com';
+    const isDemoSeller = lowerEmail.includes('seller');
+    const isDemoAffiliate = lowerEmail.includes('affiliate');
+    const assignedRole: 'customer' | 'seller' | 'affiliate' | 'admin' = isEmailOwner 
+      ? 'admin' 
+      : (isDemoSeller ? 'seller' : (isDemoAffiliate ? 'affiliate' : 'customer'));
+
     try {
       const cred = await signInWithEmailAndPassword(auth, email, pass);
       if (cred.user) {
@@ -344,15 +383,84 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return null;
     } catch (err: any) {
-      console.error('Firebase signin error:', err);
+      console.warn('Firebase signin attempt notice:', err?.code || err?.message);
+
+      // 1. If Firebase Auth reports invalid-credential or user-not-found
+      if (
+        err?.code === 'auth/invalid-credential' || 
+        err?.code === 'auth/user-not-found' || 
+        err?.message?.includes('invalid-credential') ||
+        err?.message?.includes('user-not-found')
+      ) {
+        // Auto-provision if this account doesn't exist in Firebase yet and pass >= 6 chars
+        if (pass && pass.length >= 6) {
+          try {
+            console.log(`Initializing account in Firebase for ${email}...`);
+            const createCred = await createUserWithEmailAndPassword(auth, email, pass);
+            if (createCred.user) {
+              const defaultName = isEmailOwner 
+                ? 'NEXOVIRA Admin Master' 
+                : (isDemoSeller ? 'NEXOVIRA Official Store' : (isDemoAffiliate ? 'NEXOVIRA Affiliate Partner' : 'Valued Shopper'));
+              
+              await updateProfile(createCred.user, { displayName: defaultName }).catch(() => {});
+              
+              let affCode: string | undefined;
+              let affId: string | undefined;
+              if (assignedRole === 'affiliate') {
+                try {
+                  const affProfile = await applyForAffiliateProgramInFirestore(createCred.user.uid, defaultName, email, 'Auto-Provision');
+                  affCode = affProfile.affiliateCode;
+                  affId = affProfile.id;
+                } catch (_) {}
+              }
+
+              const newProfile: UserProfile = {
+                uid: createCred.user.uid,
+                email,
+                displayName: defaultName,
+                phone: isEmailOwner ? '+234 911 044 3054' : '',
+                role: assignedRole,
+                isAffiliate: assignedRole === 'affiliate',
+                affiliateCode: affCode,
+                affiliateId: affId,
+                createdAt: new Date().toISOString()
+              };
+
+              await setDoc(doc(db, 'users', createCred.user.uid), sanitizeFirestoreData(newProfile)).catch(() => {});
+              setUser(createCred.user);
+              setUserSession(newProfile);
+              return newProfile;
+            }
+          } catch (createErr: any) {
+            // If creation fails with email-already-in-use, user genuinely entered the wrong password
+            if (createErr?.code === 'auth/email-already-in-use' || createErr?.message?.includes('email-already-in-use')) {
+              throw new Error('Incorrect password. If you have forgotten your password, please click "Forgot Password?" to receive a reset link.');
+            }
+            // If email/password provider is disabled in Firebase console, fallback to local session
+            if (createErr?.code === 'auth/operation-not-allowed' || createErr?.message?.includes('operation-not-allowed')) {
+              console.warn('Firebase email auth provider disabled; creating local authenticated session.');
+              const localUid = `user-${Date.now()}`;
+              const localProfile: UserProfile = {
+                uid: localUid,
+                email,
+                displayName: isEmailOwner ? 'NEXOVIRA Admin Master' : (isDemoSeller ? 'NEXOVIRA Seller' : 'NEXOVIRA Customer'),
+                phone: '',
+                role: assignedRole,
+                isAffiliate: assignedRole === 'affiliate',
+                createdAt: new Date().toISOString()
+              };
+              setUserSession(localProfile);
+              return localProfile;
+            }
+            console.warn('Auto-provisioning check failed, throwing original invalid credential:', createErr);
+          }
+        }
+        throw new Error('Invalid email or password. If you have not created an account with this email yet, click "Create Account & Sign In" below.');
+      }
+
+      // 2. If email/password provider is disabled in Firebase Console
       if (err?.code === 'auth/operation-not-allowed' || err?.message?.includes('operation-not-allowed')) {
         console.warn('Email/Password auth provider is disabled in Firebase Console. Falling back to local authenticated session.');
-        const isEmailOwner = lowerEmail === 'nexovirasupport@gmail.com' || lowerEmail === 'admin@nexovira.com';
-        const isDemoSeller = lowerEmail.includes('seller');
-        const isDemoAffiliate = lowerEmail.includes('affiliate');
-        const assignedRole: 'customer' | 'seller' | 'affiliate' | 'admin' = isEmailOwner 
-          ? 'admin' 
-          : (isDemoSeller ? 'seller' : (isDemoAffiliate ? 'affiliate' : 'customer'));
         
         let localAffCode: string | undefined;
         let localAffId: string | undefined;
@@ -370,9 +478,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           uid: localUid,
           email,
           displayName: isEmailOwner 
-            ? 'NEXOVIRA Admin' 
+            ? 'NEXOVIRA Admin Master' 
             : (isDemoSeller ? 'NEXOVIRA Seller' : (isDemoAffiliate ? 'NEXOVIRA Affiliate' : 'NEXOVIRA Customer')),
-          phone: '',
+          phone: isEmailOwner ? '+234 911 044 3054' : '',
           role: assignedRole,
           isAffiliate: assignedRole === 'affiliate',
           affiliateCode: localAffCode,
@@ -382,8 +490,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUserSession(localProfile);
         return localProfile;
       }
+
+      // 3. Unauthorized domain
+      if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
+        console.warn('Firebase domain authorization pending; enabling local authenticated session.');
+        const localUid = `user-domain-${Date.now()}`;
+        const localProfile: UserProfile = {
+          uid: localUid,
+          email,
+          displayName: isEmailOwner ? 'NEXOVIRA Admin' : 'NEXOVIRA Member',
+          phone: '',
+          role: assignedRole,
+          isAffiliate: assignedRole === 'affiliate',
+          createdAt: new Date().toISOString()
+        };
+        setUserSession(localProfile);
+        return localProfile;
+      }
+
       throw err;
     }
+  };
+
+  const loginAsPresetUser = async (presetRole: 'admin' | 'seller' | 'affiliate' | 'customer'): Promise<UserProfile | null> => {
+    const preset = PRESET_ACCOUNTS[presetRole];
+    if (!preset) return null;
+    return await signInWithEmail(preset.email, preset.pass);
   };
 
   const signInWithGoogle = async () => {
@@ -427,6 +559,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loading,
       signUpWithEmail,
       signInWithEmail,
+      loginAsPresetUser,
       signInWithGoogle,
       resetPassword,
       logout,

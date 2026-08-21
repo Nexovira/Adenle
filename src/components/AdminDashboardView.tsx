@@ -35,7 +35,8 @@ import {
   ShieldAlert,
   History,
   Eye,
-  AlertTriangle
+  AlertTriangle,
+  LogOut
 } from 'lucide-react';
 import { EbookProductUploadForm } from './EbookProductUploadForm';
 import { useAuth } from '../context/AuthContext';
@@ -79,7 +80,7 @@ interface AdminDashboardViewProps {
 }
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNavigate }) => {
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, loading, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'categories' | 'orders' | 'services' | 'affiliates' | 'seller-payouts' | 'audit-logs' | 'settings'>('overview');
 
   // Seller Payout State
@@ -386,14 +387,27 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onNaviga
           </p>
         </div>
 
-        <button
-          onClick={loadData}
-          disabled={loadingData}
-          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 flex items-center gap-2 shrink-0"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loadingData ? 'animate-spin' : ''}`} />
-          Refresh Database
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={loadData}
+            disabled={loadingData}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700 flex items-center gap-2 shrink-0 transition-colors cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loadingData ? 'animate-spin' : ''}`} />
+            Refresh Database
+          </button>
+          <button
+            onClick={async () => {
+              await logout();
+              onNavigate && onNavigate('/signin');
+            }}
+            className="px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 font-bold text-xs rounded-xl border border-rose-500/30 flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
+            title="Sign Out of Admin Account"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Sign Out</span>
+          </button>
+        </div>
       </div>
 
       {saveSuccessMsg && (

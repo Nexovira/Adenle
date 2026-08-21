@@ -74,7 +74,8 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   LogIn,
-  UserPlus
+  UserPlus,
+  LogOut
 } from 'lucide-react';
 
 interface AffiliatePortalViewProps {
@@ -99,7 +100,7 @@ export interface StandardMarketplaceItem {
 }
 
 export const AffiliatePortalView: React.FC<AffiliatePortalViewProps> = ({ currentCurrency, onNavigate }) => {
-  const { user, userProfile, loading: authLoading } = useAuth();
+  const { user, userProfile, logout, loading: authLoading } = useAuth();
   
   // Navigation Tabs
   const [activeTab, setActiveTab] = useState<'marketplace' | 'wallet' | 'links' | 'account'>('marketplace');
@@ -471,7 +472,7 @@ export const AffiliatePortalView: React.FC<AffiliatePortalViewProps> = ({ curren
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-left space-y-6">
       
       {/* Header Banner */}
-      <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-rose-950 via-slate-900 to-slate-950 border border-rose-900/40 text-white relative overflow-hidden shadow-2xl">
+      <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-rose-950 via-slate-900 to-slate-950 border border-rose-900/40 text-white relative overflow-hidden shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="max-w-3xl space-y-2 relative z-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 text-xs font-bold border border-rose-500/30">
             <Share2 className="w-3.5 h-3.5" />
@@ -482,6 +483,19 @@ export const AffiliatePortalView: React.FC<AffiliatePortalViewProps> = ({ curren
             Promote appliances, tech services, academy courses, and digital e-books. Track real-time clicks, conversions, and receive automated bank payouts.
           </p>
         </div>
+        {user && (
+          <button
+            onClick={async () => {
+              await logout();
+              onNavigate && onNavigate('/signin');
+            }}
+            className="self-start md:self-center px-4 py-2.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shrink-0 z-10"
+            title="Sign Out of Affiliate Portal"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Sign Out</span>
+          </button>
+        )}
       </div>
 
       {authLoading || (loading && user) ? (

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Mail, Lock, LogIn, ArrowRight, ShieldCheck, AlertCircle, Eye, EyeOff, KeyRound, CheckCircle2, HelpCircle, Copy, Check } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { Mail, Lock, LogIn, ArrowRight, ShieldCheck, AlertCircle, Eye, EyeOff, KeyRound, CheckCircle2, HelpCircle, Copy, Check, Sparkles, Store, Share2, ShoppingBag } from 'lucide-react';
+import { useAuth, PRESET_ACCOUNTS } from '../context/AuthContext';
 import { NexoviraLogo } from './NexoviraLogo';
 
 interface SignInViewProps {
@@ -9,7 +9,7 @@ interface SignInViewProps {
 }
 
 export const SignInView: React.FC<SignInViewProps> = ({ onNavigate, onSuccessRedirect = '/account' }) => {
-  const { signInWithEmail, signUpWithEmail, signInWithGoogle, resetPassword } = useAuth();
+  const { signInWithEmail, signUpWithEmail, loginAsPresetUser, signInWithGoogle, resetPassword } = useAuth();
   const [email, setEmail] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('nexovira_pending_auth_email') || '';
@@ -22,6 +22,30 @@ export const SignInView: React.FC<SignInViewProps> = ({ onNavigate, onSuccessRed
   const [domainNotice, setDomainNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [registeringQuick, setRegisteringQuick] = useState(false);
+  const [presetLoading, setPresetLoading] = useState<string | null>(null);
+
+  const handleQuickPreset = async (role: 'admin' | 'seller' | 'affiliate' | 'customer') => {
+    setError('');
+    setDomainNotice(null);
+    setPresetLoading(role);
+    try {
+      const profile = await loginAsPresetUser(role);
+      if (role === 'admin' || profile?.role === 'admin') {
+        onNavigate('/admin');
+      } else if (role === 'seller' || profile?.role === 'seller') {
+        onNavigate('/seller');
+      } else if (role === 'affiliate' || profile?.role === 'affiliate' || profile?.isAffiliate) {
+        onNavigate('/affiliate');
+      } else {
+        onNavigate(onSuccessRedirect || '/account');
+      }
+    } catch (err: any) {
+      console.error('Preset login error:', err);
+      setError(formatAuthError(err));
+    } finally {
+      setPresetLoading(null);
+    }
+  };
 
   const handleEmailChange = (newEmail: string) => {
     setEmail(newEmail);
@@ -180,6 +204,83 @@ export const SignInView: React.FC<SignInViewProps> = ({ onNavigate, onSuccessRed
           </div>
           <h1 className="text-xl font-bold text-white tracking-tight mt-2">Sign In to NEXOVIRA</h1>
           <p className="text-slate-400 text-xs mt-1">Access your account, track orders, & manage purchases</p>
+        </div>
+
+        {/* 1-Click Fast Access / Demo Accounts */}
+        <div className="mb-6 p-4 bg-slate-950/80 border border-cyan-500/20 rounded-2xl space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Instant Test &amp; Demo Access</span>
+            </span>
+            <span className="text-[10px] text-slate-500 font-mono">1-Click Sign In</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={presetLoading !== null || loading}
+              onClick={() => handleQuickPreset('admin')}
+              className="p-2.5 bg-slate-900 hover:bg-slate-800 border border-purple-500/30 hover:border-purple-500/60 rounded-xl text-left transition-all cursor-pointer group disabled:opacity-50"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-purple-300 group-hover:text-purple-200 flex items-center gap-1">
+                  👑 Store Owner / Admin
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-mono block truncate">
+                {presetLoading === 'admin' ? 'Signing in...' : 'admin@nexovira.com'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              disabled={presetLoading !== null || loading}
+              onClick={() => handleQuickPreset('seller')}
+              className="p-2.5 bg-slate-900 hover:bg-slate-800 border border-cyan-500/30 hover:border-cyan-500/60 rounded-xl text-left transition-all cursor-pointer group disabled:opacity-50"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-cyan-300 group-hover:text-cyan-200 flex items-center gap-1">
+                  🏪 Verified Seller
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-mono block truncate">
+                {presetLoading === 'seller' ? 'Signing in...' : 'seller@nexovira.com'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              disabled={presetLoading !== null || loading}
+              onClick={() => handleQuickPreset('affiliate')}
+              className="p-2.5 bg-slate-900 hover:bg-slate-800 border border-emerald-500/30 hover:border-emerald-500/60 rounded-xl text-left transition-all cursor-pointer group disabled:opacity-50"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-300 group-hover:text-emerald-200 flex items-center gap-1">
+                  🤝 Affiliate Partner
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-mono block truncate">
+                {presetLoading === 'affiliate' ? 'Signing in...' : 'affiliate@nexovira.com'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              disabled={presetLoading !== null || loading}
+              onClick={() => handleQuickPreset('customer')}
+              className="p-2.5 bg-slate-900 hover:bg-slate-800 border border-blue-500/30 hover:border-blue-500/60 rounded-xl text-left transition-all cursor-pointer group disabled:opacity-50"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-blue-300 group-hover:text-blue-200 flex items-center gap-1">
+                  🛍️ Shopper Account
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-mono block truncate">
+                {presetLoading === 'customer' ? 'Signing in...' : 'shopper@nexovira.com'}
+              </span>
+            </button>
+          </div>
         </div>
 
 

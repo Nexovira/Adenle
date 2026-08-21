@@ -17,6 +17,7 @@ import {
   Info,
   HelpCircle,
   LogIn,
+  LogOut,
   Mic,
   MicOff,
   Layers,
@@ -161,7 +162,7 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  const { user, userProfile, isAdmin, isSeller } = useAuth();
+  const { user, userProfile, isAdmin, isSeller, logout } = useAuth();
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -340,30 +341,45 @@ export const Header: React.FC<HeaderProps> = ({
           </a>
 
           {user ? (
-            <a
-              href={userProfile?.role === 'admin' ? '/admin' : userProfile?.role === 'seller' ? '/seller' : (userProfile?.role === 'affiliate' || userProfile?.isAffiliate) ? '/affiliate' : '/account'}
-              onClick={(e) => {
-                e.preventDefault();
-                if (userProfile?.role === 'admin') onNavigate('/admin');
-                else if (userProfile?.role === 'seller') onNavigate('/seller');
-                else if (userProfile?.role === 'affiliate' || userProfile?.isAffiliate) onNavigate('/affiliate');
-                else onNavigate('/account');
-              }}
-              className="p-1.5 sm:px-3 text-slate-700 dark:text-slate-200 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors flex items-center gap-2 border border-slate-200 dark:border-slate-800"
-              title="My Profile & Portal"
-            >
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 text-slate-950 font-black text-xs flex items-center justify-center">
-                {(userProfile?.displayName || user.email || 'U')[0].toUpperCase()}
-              </div>
-              <span className="hidden xl:inline text-xs font-bold truncate max-w-[100px]">
-                {userProfile?.displayName || user.displayName || user.email?.split('@')[0]}
-              </span>
-              {(userProfile?.role === 'affiliate' || userProfile?.isAffiliate) && (
-                <span className="hidden sm:inline-block px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                  AFFILIATE
+            <div className="flex items-center gap-1 sm:gap-1.5">
+              <a
+                href={userProfile?.role === 'admin' ? '/admin' : userProfile?.role === 'seller' ? '/seller' : (userProfile?.role === 'affiliate' || userProfile?.isAffiliate) ? '/affiliate' : '/account'}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (userProfile?.role === 'admin') onNavigate('/admin');
+                  else if (userProfile?.role === 'seller') onNavigate('/seller');
+                  else if (userProfile?.role === 'affiliate' || userProfile?.isAffiliate) onNavigate('/affiliate');
+                  else onNavigate('/account');
+                }}
+                className="p-1.5 sm:px-3 text-slate-700 dark:text-slate-200 hover:text-cyan-500 dark:hover:text-cyan-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors flex items-center gap-2 border border-slate-200 dark:border-slate-800"
+                title="My Profile & Portal"
+              >
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 text-slate-950 font-black text-xs flex items-center justify-center">
+                  {(userProfile?.displayName || user.email || 'U')[0].toUpperCase()}
+                </div>
+                <span className="hidden xl:inline text-xs font-bold truncate max-w-[100px]">
+                  {userProfile?.displayName || user.displayName || user.email?.split('@')[0]}
                 </span>
-              )}
-            </a>
+                {(userProfile?.role === 'affiliate' || userProfile?.isAffiliate) && (
+                  <span className="hidden sm:inline-block px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                    AFFILIATE
+                  </span>
+                )}
+              </a>
+
+              <button
+                onClick={async () => {
+                  await logout();
+                  onNavigate('/signin');
+                }}
+                className="p-2 sm:px-2.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 dark:hover:bg-rose-500/10 rounded-xl transition-all flex items-center gap-1.5 text-xs font-bold border border-transparent hover:border-rose-500/30 cursor-pointer"
+                title="Sign Out"
+                aria-label="Sign Out"
+              >
+                <LogOut className="w-4 h-4 text-rose-400" />
+                <span className="hidden xl:inline text-rose-400">Sign Out</span>
+              </button>
+            </div>
           ) : (
             <a
               href="/signin"
@@ -487,6 +503,65 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Mobile Menu Drawer */}
       {mobileMenuOpen && (
         <div className="lg:hidden border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B0F17] px-4 py-4 space-y-4">
+          {/* User Account / Sign Out / Sign In Quick Bar */}
+          {user ? (
+            <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-between gap-3 shadow-md">
+              <a
+                href={userProfile?.role === 'admin' ? '/admin' : userProfile?.role === 'seller' ? '/seller' : (userProfile?.role === 'affiliate' || userProfile?.isAffiliate) ? '/affiliate' : '/account'}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setMobileMenuOpen(false);
+                  if (userProfile?.role === 'admin') onNavigate('/admin');
+                  else if (userProfile?.role === 'seller') onNavigate('/seller');
+                  else if (userProfile?.role === 'affiliate' || userProfile?.isAffiliate) onNavigate('/affiliate');
+                  else onNavigate('/account');
+                }}
+                className="flex items-center gap-2.5 min-w-0 flex-1 hover:opacity-90 transition-opacity"
+              >
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 text-slate-950 font-black text-sm flex items-center justify-center shrink-0">
+                  {(userProfile?.displayName || user.email || 'U')[0].toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-white truncate">
+                    {userProfile?.displayName || user.displayName || user.email?.split('@')[0]}
+                  </p>
+                  <p className="text-[10px] text-cyan-400 font-mono capitalize">
+                    {userProfile?.role || 'Customer'} Portal →
+                  </p>
+                </div>
+              </a>
+              <button
+                onClick={async () => {
+                  await logout();
+                  setMobileMenuOpen(false);
+                  onNavigate('/signin');
+                }}
+                className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors"
+                title="Sign Out of Account"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          ) : (
+            <div className="p-3 bg-slate-100 dark:bg-slate-900/90 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 text-cyan-500" />
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Welcome to NEXOVIRA</span>
+              </div>
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onNavigate('/signin');
+                }}
+                className="px-3 py-1.5 bg-cyan-500 text-slate-950 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer hover:bg-cyan-400 transition-colors"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Sign In</span>
+              </button>
+            </div>
+          )}
+
           <div className="p-3 bg-slate-100 dark:bg-slate-900/90 rounded-2xl border border-slate-200 dark:border-slate-800 text-center">
             <NexoviraLogo size={32} showText={true} showTagline={true} taglineClassName="text-[10px] font-medium text-cyan-600 dark:text-cyan-400 mt-0.5" />
           </div>

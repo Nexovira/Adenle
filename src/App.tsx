@@ -462,6 +462,7 @@ export default function App() {
               onAddProduct={(newProd) => setAllProducts([newProd, ...allProducts])}
               sellerId={userProfile?.uid || user?.uid}
               sellerName={userProfile?.displayName || (userProfile as any)?.storeName || user?.displayName}
+              onNavigate={handleNavigate}
             />
           ) : (
             <div className="min-h-[70vh] flex items-center justify-center p-6 bg-[#0B0F17]">
